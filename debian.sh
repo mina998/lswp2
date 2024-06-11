@@ -23,7 +23,7 @@ source ./common.sh
 # 更新系统
 apt update -y
 # 安装所需工具
-apt-get install socat cron curl wget gnupg unzip iputils-ping apt-transport-https ca-certificates software-properties-common gawk p7zip-full systemd-timesyncd -y
+apt-get install socat cron curl wget gnupg unzip iputils-ping apt-transport-https ca-certificates software-properties-common gawk p7zip-full systemd-timesyncd iptables -y
 # 创建目录
 [ ! -e "$SRC_PATH" ] && mkdir -p $SRC_PATH
 # 检测面板是否安装
