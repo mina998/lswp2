@@ -100,11 +100,10 @@ install_wp_cli
 
 function install_mysql {
     # 添加MySQL 密钥
-    apt-key adv --keyserver keyserver.ubuntu.com --recv-keys A8D3785C >/dev/null 2>&1
-    if [ $? -ne 0 ]; then
-        echoRC "添加MySQL.GPG密钥失败."
-        exit 1
-    fi
+    wget https://repo.mysql.com/RPM-GPG-KEY-mysql-2023
+    gpg --dearmor RPM-GPG-KEY-mysql-2023
+    mv RPM-GPG-KEY-mysql-2023.gpg /etc/apt/trusted.gpg.d/
+    rm RPM-GPG-KEY-mysql-2023
     # 检查MySQL密钥是否添加成功
     apt-key list 2>&1 | grep MySQL >/dev/null 
     if [ $? -ne 0 ]; then 
