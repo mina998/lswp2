@@ -59,7 +59,7 @@ function query_public_ip {
     echo $(curl -s https://ip.idsss.workers.dev)
 }
 apt update -y
-apt-get install socat cron curl wget gnupg unzip iputils-ping apt-transport-https ca-certificates software-properties-common gawk p7zip-full systemd-timesyncd -y
+apt-get install socat cron curl wget gnupg unzip iputils-ping apt-transport-https ca-certificates software-properties-common gawk p7zip-full systemd-timesyncd iptables -y
 [ ! -e "$SRC_PATH" ] && mkdir -p $SRC_PATH
 if [ -d $OLS_ROOT ]; then
     echoRC "检测到OpenLiteSpeed已安装"
@@ -117,11 +117,10 @@ function install_wp_cli {
 }
 install_wp_cli
 function install_mysql {
-    apt-key adv --keyserver keyserver.ubuntu.com --recv-keys A8D3785C >/dev/null 2>&1
-    if [ $? -ne 0 ]; then
-        echoRC "添加MySQL.GPG密钥失败."
-        exit 1
-    fi
+    wget https://repo.mysql.com/RPM-GPG-KEY-mysql-2023
+    gpg --dearmor RPM-GPG-KEY-mysql-2023
+    mv RPM-GPG-KEY-mysql-2023.gpg /etc/apt/trusted.gpg.d/
+    rm RPM-GPG-KEY-mysql-2023
     apt-key list 2>&1 | grep MySQL >/dev/null 
     if [ $? -ne 0 ]; then 
         echoRC '从repo.mysql.com添加密钥失败.请检查密钥问题!'
