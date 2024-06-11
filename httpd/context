@@ -1,0 +1,10 @@
+
+context /context_path {
+    location                $VH_ROOT/context_path
+    allowBrowse             1
+    indexFiles              index.php
+    rewrite  {
+        RewriteFile .htaccess
+    }
+    addDefaultCharset       off
+}

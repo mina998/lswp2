@@ -1,0 +1,223 @@
+#!/bin/bash
+DB_VERSION=8.0
+OLS_VERSION=1.8.1
+SRC_PATH=/root/install
+OLS_ROOT=/usr/local/lsws
+OLS_CONF_DIR=$OLS_ROOT/conf
+VH_DOMAIN_FILE=$OLS_CONF_DIR/vhosts.conf
+DOWNLOAD_URL=https://raw.githubusercontent.com/mina998/lswp2/main/httpd
+RC="\033[38;5;196m"; RR="\033[31m"; GC="\033[38;5;82m"; LG="\033[38;5;72m"; BC="\033[39;1;34m"; SB="\033[38;5;45m"
+CC="\033[38;5;208m"; PC="\033[38;5;201m"; YC="\033[38;5;148m"; ED="\033[0m";
+function echoRC {
+    echo -e "$RC${1}$ED"
+}
+function echoRR {
+    echo -e "$RR${1}$ED"
+}
+function echoGC {
+    echo -e "$GC${1}$ED"
+}
+function echoLG {
+    echo -e "$LG${1}$ED"
+}
+function echoBC {
+    echo -e "$BC${1}$ED"
+}
+function echoSB {
+    echo -e "$SB${1}$ED"
+}
+function echoCC {
+    echo -e "$CC${1}$ED"
+}
+function echoPC {
+    echo -e "$PC${1}$ED"
+}
+function echoYC {
+    echo -e "$YC${1}$ED"
+}
+if [ ! -f /etc/os-release ]; then
+    echoRC "当前操作系统不支持."
+    exit 1
+fi
+. /etc/os-release
+if [ "$ID" != 'ubuntu' ] && [ "$ID" != 'debian' ]; then
+    echoRC "当前操作系统不支持."
+    exit 1
+fi
+function random_str {
+    local length=10
+    [ -n "$1" ] && length=$1
+    echo $(head -c $length /dev/urandom | base64 | tr -d '/' | tr -d '=')
+}
+function alias_from_domain {
+    echo "$1" | sed 's/\-/_/g; s/\./_/g'
+}
+function is_db_exist {
+    echo $(mysql -Nse "show DATABASES like '$1'")
+}
+function query_public_ip {
+    echo $(curl -s https://ip.idsss.workers.dev)
+}
+apt update -y
+apt-get install socat cron curl wget gnupg unzip iputils-ping apt-transport-https ca-certificates software-properties-common gawk p7zip-full systemd-timesyncd -y
+[ ! -e "$SRC_PATH" ] && mkdir -p $SRC_PATH
+if [ -d $OLS_ROOT ]; then
+    echoRC "检测到OpenLiteSpeed已安装"
+    exit 1
+fi
+if systemctl is-active --quiet mysql; then
+    echoRC "安装失败, 本机已存在MySQL服务."
+    exit 1
+fi
+cd $SRC_PATH
+function install_ols {
+    wget -O - https://repo.litespeed.sh | bash
+    wget https://openlitespeed.org/packages/openlitespeed-${OLS_VERSION}-x86_64-linux.tgz
+    if [ $? -ne 0 ]; then
+        echoRC '下载OpenLiteSpeed安装包失败'
+        exit 1
+    fi
+    tar xf openlitespeed-${OLS_VERSION}-x86_64-linux.tgz
+    cd openlitespeed
+    sed -i 's/USE_LSPHP7=yes/USE_LSPHP7=no/' ols.conf
+    cat ols.conf
+    ./install.sh
+    apt install lsphp81 lsphp81-common lsphp81-intl lsphp81-curl lsphp81-opcache lsphp81-imagick lsphp81-mysql lsphp81-memcached -y
+    [ -f /usr/bin/php ]  && rm -f /usr/bin/php
+    ln -s $OLS_ROOT/lsphp81/bin/php /usr/bin/php
+    cd $SRC_PATH && rm -rf *
+    curl $DOWNLOAD_URL/httpd_config > $OLS_CONF_DIR/httpd_config.conf
+    curl $DOWNLOAD_URL/example.crt -o $OLS_CONF_DIR/example.crt
+    curl $DOWNLOAD_URL/example.key -o $OLS_CONF_DIR/example.key
+    curl $DOWNLOAD_URL/wordpress -o $OLS_CONF_DIR/templates/wordpress.conf
+    if [ $? -eq 0 ];then
+        chown lsadm:nogroup $OLS_CONF_DIR/templates/wordpress.conf
+    fi
+    echo '' > $VH_DOMAIN_FILE
+    chown lsadm:nogroup $VH_DOMAIN_FILE
+    service lsws restart
+}
+install_ols
+function install_wp_cli {
+    cd $SRC_PATH
+    [ -e /usr/local/bin/wp ] && rm /usr/local/bin/wp
+    [ -e /usr/bin/wp ] && rm /usr/bin/wp
+    wget -Nq https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
+    if [ $? -ne 0 ]; then
+        echoRC "${RC}下载WP CLI失败${ED}."
+        exit 1
+    fi 
+    chmod +x wp-cli.phar
+    echo $PATH | grep '/usr/local/bin' >/dev/null 2>&1
+    if [ $? -eq 0 ]; then
+        mv wp-cli.phar /usr/local/bin/wp
+    else
+        mv wp-cli.phar /usr/bin/wp
+    fi
+}
+install_wp_cli
+function install_mysql {
+    apt-key adv --keyserver keyserver.ubuntu.com --recv-keys A8D3785C >/dev/null 2>&1
+    if [ $? -ne 0 ]; then
+        echoRC "添加MySQL.GPG密钥失败."
+        exit 1
+    fi
+    apt-key list 2>&1 | grep MySQL >/dev/null 
+    if [ $? -ne 0 ]; then 
+        echoRC '从repo.mysql.com添加密钥失败.请检查密钥问题!'
+        exit 1
+    fi
+    local mysql_repo='/etc/apt/sources.list.d/mysql.list'
+    echo "deb http://repo.mysql.com/apt/${ID} $VERSION_CODENAME mysql-${DB_VERSION}" > "${mysql_repo}"  
+    apt update -y
+    if [ $? -ne 0 ]; then
+        echoRC "更新包失败."
+        exit 1
+    fi
+    mysql_root_password=$(random_str)
+    debconf-set-selections <<< "mysql-community-server mysql-community-server/root-pass password ${mysql_root_password}"
+    debconf-set-selections <<< "mysql-community-server mysql-community-server/re-root-pass password ${mysql_root_password}"
+    DEBIAN_FRONTEND=noninteractive apt -y install mysql-server
+    if [ $? != 0 ] ; then
+        echoRC "安装MySQL时发生错误."
+        echoYC "您可能需要手动运行'apt -y -f --allow-unauthenticated install mysql-server' 命令进行检查。中止安装!"
+        exit 1
+    fi
+    service mysql start
+    if [ $? -ne 0 ]; then
+        echoRC "MySQL启动失败"
+        exit 1
+    fi
+    echo -e "\n[client]\nuser=root\npassword=${mysql_root_password}\n" >> /etc/mysql/my.cnf
+    chmod 600 /etc/mysql/my.cnf
+}
+install_mysql
+function install_php_my_admin {
+    local example=$OLS_ROOT/Example
+    cd $example
+    if [ -d "phpMyAdmin" ]; then
+        echoRC '检测到phpMyAdmin已安装!'
+        exit 1
+    fi
+    wget -O phpMyAdmin.zip https://files.phpmyadmin.net/phpMyAdmin/5.1.1/phpMyAdmin-5.1.1-english.zip
+    if [ $? -ne 0 ]; then
+        echoRC '下载phpMyAdmin失败!'
+        exit 1
+    fi
+    unzip phpMyAdmin.zip > /dev/null 2>&1
+    rm phpMyAdmin.zip
+    mv phpMyAdmin-5.1.1-english phpMyAdmin
+    cd phpMyAdmin
+    mkdir tmp && chmod 777 tmp
+    keybs=$(random_str 64)
+    sed -i "/\$cfg\['blowfish_secret'\]/s/''/'$keybs'/" config.sample.inc.php
+    cd libraries
+    sed -i "/\$cfg\['blowfish_secret'\]/s/''/'$keybs'/" config.default.php
+    mysql < $example/phpMyAdmin/sql/create_tables.sql
+    curl $DOWNLOAD_URL/context | sed s/context_path/phpMyAdmin/g >> $OLS_CONF_DIR/vhosts/Example/vhconf.conf
+    systemctl restart lsws
+}
+install_php_my_admin
+function firewall_rules_create {
+    if [ -z "$(which iptables)" ]; then
+        echoRC 'iptables不存在'
+        exit 1
+    fi
+    curl $DOWNLOAD_URL/firewall > /etc/iptables.rules
+    curl $DOWNLOAD_URL/rc.local > /etc/rc.local
+    local ssh=$(ss -tapl | grep sshd | awk 'NR==1 {print $4}' | cut -f2 -d :)
+    [ -n "$ssh" ] && sed -i "s/22,80/$ssh,80/" /etc/iptables.rules
+    chmod +x /etc/rc.local
+    systemctl start rc-local
+}
+firewall_rules_create
+function acme_sh_install {
+    [ -d "/root/.acme.sh" ] && rm -rf /root/.acme.sh
+    local email=$(tr -dc 'a-z' < /dev/urandom | head -c 8)@gmail.com
+    curl https://get.acme.sh | sh -s email=$email
+    /root/.acme.sh/acme.sh --register-account -m $email >/dev/null 2>&1
+    /root/.acme.sh/acme.sh --set-default-ca --server letsencrypt >/dev/null 2>&1
+    if [ $? -ne 0 ]; then
+        echoRC 'SSL证书签发程序下载失败.'
+        exit 1
+    fi
+}
+acme_sh_install
+timedatectl set-timezone Asia/Shanghai
+timedatectl set-ntp true 
+curl $DOWNLOAD_URL/lswp > /usr/local/bin/lswp
+chmod +x /usr/local/bin/lswp
+echoPC '菜单指令: lswp'
+public_ip=$(query_public_ip)
+echoCC '安装完成.请保存以下信息!'
+echoGC '面板管理账号/密码'
+echo -ne "$SB"
+cat $OLS_ROOT/adminpasswd | grep -oE admin.*
+echo -ne "$ED"
+echoGC '面板地址'
+echoSB "https://${public_ip}:7080"
+echoGC "MySQL管理员账号密码"
+echoSB "root / $mysql_root_password"
+echoGC "phpMyAdmin安装完成."
+echoSB "phpMyAdmin地址: http://$(query_public_ip):8088/phpMyAdmin"
+rm -rf $SRC_PATH

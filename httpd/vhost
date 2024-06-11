@@ -1,0 +1,43 @@
+
+virtualhost #alias {
+    vhRoot                    /home/#domain
+
+    docRoot                   /home/#domain/public_html
+    vhDomain                  #domain
+    enableGzip                1
+    enableBr                  1
+
+    scripthandler  {
+        add                     lsapi:#alias php
+    }
+
+    extprocessor #alias {
+        type                    lsapi
+        address                 uds://tmp/lshttpd/#alias.sock
+        maxConns                10
+        env                     PHP_LSAPI_CHILDREN=10
+        initTimeout             60
+        retryTimeout            0
+        persistConn             1
+        respBuffer              0
+        autoStart               2
+        path                    /usr/local/lsws/lsphp81/bin/lsphp
+        extUser                 #alias
+        extGroup                #alias
+    }
+
+    rewrite  {
+        enable                  1
+        autoLoadHtaccess        1
+    }
+
+    vhssl  {
+        keyFile                 /usr/local/lsws/conf/example.key
+        certFile                /usr/local/lsws/conf/example.crt
+        certChain               1
+    }
+
+    allowSymbolLink         1
+    enableScript            1
+    restrained              1
+}

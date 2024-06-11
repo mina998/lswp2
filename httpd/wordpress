@@ -1,0 +1,70 @@
+vhRoot                    /home/$VH_NAME
+configFile                $SERVER_ROOT/conf/vhosts/$VH_NAME/vhconf.conf
+allowSymbolLink           1
+enableScript              1
+restrained                1
+setUIDMode                2
+
+virtualHostConfig  {
+    docRoot                 $VH_ROOT/public_html/
+    enableGzip              1
+    enableBr                1
+
+    errorlog $VH_ROOT/logs/error.log {
+        useServer             0
+        logLevel              WARN
+        rollingSize           10M
+        keepDays              3
+    }
+
+    accesslog $VH_ROOT/logs/access.log {
+        useServer             0
+        rollingSize           10M
+        keepDays              7
+        compressArchive       1
+    }
+
+    index  {
+        useServer             0
+        indexFiles            index.php, index.html
+        autoIndex             0
+        autoIndexURI          /_autoindex/default.php
+    }
+
+    phpIniOverride  {
+        php_value post_max_size = 300M
+        php_value upload_max_filesize = 300M
+        php_value memory_limit = 256M
+        php_value max_execution_time = 600
+    }
+
+    expires  {
+        enableExpires         1
+    }
+
+    accessControl  {
+        allow                 *
+    }
+
+    context / {
+        location              $DOC_ROOT/
+        allowBrowse           1
+
+        rewrite  {
+            RewriteFile .htaccess
+        }
+    }
+
+    rewrite  {
+        enable                1
+        autoLoadHtaccess      1
+        logLevel              0
+    }
+
+    vhssl  {
+        keyFile               $VH_ROOT/cert/key.pem
+        certFile              $VH_ROOT/cert/fullchain.pem
+        certChain             1
+    }
+}
+
